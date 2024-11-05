@@ -8,7 +8,7 @@ int find_data_parent(std::vector<visitorData> graph, visitorData* vd) {
   for(visitorData el: graph) {
     // data parent is function parameter or var decl
     // @TODO check if not a function
-    printf(" ------> %s %s ???? %s %s", sn.c_str(), tn.c_str(), el.spellName.c_str(), el.typeName.c_str());
+    //printf(" ------> %s %s ???? %s %s", sn.c_str(), tn.c_str(), el.spellName.c_str(), el.typeName.c_str());
     if((el.kindName == "ParmDecl" || el.kindName == "VarDecl") 
         && (el.scope == vd->scope || el.scope == 0) 
         && (el.spellName == sn)

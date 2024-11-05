@@ -1,4 +1,6 @@
 #include "../include/unit.h"
+#include <fstream>
+#include <string>
 
 std::string parseUnit::to_dot() {
   std::string dot = "digraph graphname {\nnode [shape=record];\n";
@@ -89,7 +91,6 @@ std::string parseUnit::getBinaryOperator(CXCursor cursor) {
   // @TODO FIX 
   CXString s = clang_getTokenSpelling(tu, tokens[1]);
   const char* str = clang_getCString(s);
-  printf("   got %s\n", str);
   tok.append(std::string(str));
   clang_disposeString(s);
 
@@ -125,7 +126,6 @@ std::string parseUnit::getUnaryOperator(CXCursor cursor) {
   for(unsigned i=0; i<numTokens; i++) {
     CXString s = clang_getTokenSpelling(tu, tokens[i]);
     const char* str = clang_getCString(s);
-    printf("   got %s\n", str);
     tok.append(std::string(str));
     clang_disposeString(s);
   }
@@ -148,8 +148,6 @@ std::string parseUnit::getTypeDef(CXCursor cursor) {
   CXString realTypeName = clang_getTypeSpelling(realType);
 
   std::string result      = clang_getCString( realTypeName );
-  
-  printf("  -- real type for typedef: %s\n", result.c_str());
 
   clang_disposeString(realTypeName);
 
@@ -162,18 +160,14 @@ std::string parseUnit::getIntegerLiteral(CXCursor cursor) {
   CXToken *tokens = 0;
   unsigned int nTokens = 0;
   clang_tokenize(this->tu, range, &tokens, &nTokens);
-  printf(" obtained %d tokens\n", nTokens);
   for (unsigned int i = 0; i < nTokens; i++)
   {
       CXString spelling = clang_getTokenSpelling(tu, tokens[i]);
-      printf("token = %s\n", clang_getCString(spelling));
       tok = std::string(clang_getCString(spelling));
       clang_disposeString(spelling);
-      printf("  disposed 1\n");
   }
 
   clang_disposeTokens(tu, tokens, nTokens); 
-  printf("  disposed 2\n");
  
   return tok;
 }
@@ -184,19 +178,16 @@ std::string parseUnit::getMacrosText(CXCursor cursor) {
   CXToken *tokens = 0;
   unsigned int nTokens = 0;
   clang_tokenize(this->tu, range, &tokens, &nTokens);
-  printf(" obtained %d tokens\n", nTokens);
   for (unsigned int i = 0; i < nTokens; i++)
   {
       CXString spelling = clang_getTokenSpelling(tu, tokens[i]);
-      printf("token = %s\n", clang_getCString(spelling));
+      //printf("token = %s\n", clang_getCString(spelling));
       tok.append(clang_getCString(spelling));
       tok.append(" ");
       clang_disposeString(spelling);
-      printf("  disposed 1\n");
   }
 
   clang_disposeTokens(tu, tokens, nTokens); 
-  printf("  disposed 2\n");
  
   return tok;
 }
@@ -230,15 +221,13 @@ std::string parseUnit::getCurrentFilePath(CXSourceLocation location) {
   unsigned int line, column, offset;
   clang_getSpellingLocation(location, &file, &line, &column, &offset);
 
-  printf(" data %d\n", clang_getFileName(file).data);
-
-  if(!file) printf(" file not found?? \n");
+  //if(!file) printf(" file not found?? \n");
 
   if(file) {
     CXString cxfilename = clang_File_tryGetRealPathName(file);
     filename = clang_getCString(cxfilename);
     clang_disposeString(cxfilename);
-    printf("\n#===== CURRENT LOCATION file: %s line: %d column: %d offset: %d =====#\n", filename.c_str(), line, column, offset);
+    //printf("\n#===== CURRENT LOCATION file: %s line: %d column: %d offset: %d =====#\n", filename.c_str(), line, column, offset);
     //printf(" is from main file? => %d\n", (clang_Location_isFromMainFile( location )));
   }
 
@@ -258,9 +247,8 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   //if(clang_Location_isFromMainFile( location )) {
   //  printf(" encountered header dependend tokens\n");
   //}
-  printf(" compare %d\n", strcmp(currFile.c_str(), this->path));
   if( clang_Location_isFromMainFile( location ) == 0 && (strcmp(currFile.c_str(), this->path) != 0) && (clang_getCursorKind(cursor) != CXCursor_DeclStmt)) {
-    printf(" NOT IN MAIN FILE \n");
+    //printf(" NOT IN MAIN FILE \n");
     //std::string currFile = getCurrentFilePath(location);
     //printf(" ! NOT FROM MAIN FILE => %s vs og %s | %d \n", currFile.c_str(), this->path, );
     /*
@@ -284,9 +272,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   std::string lit;
   std::string op;
   std::string kindName = getCursorKindName(cursorKind);
-  printf(" looking into %s\n", kindName.c_str());
   std::string spellName = getCursorSpelling(cursor); 
-  printf("  with name %s\n", spellName.c_str());
   std::string errorSpell = getErrorSpelling(loc, errors);
   unsigned int curLevel = this->curLevel;
   unsigned int nextLevel = curLevel + 1;
@@ -297,12 +283,9 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   vd->kindName = kindName;
   vd->spellName = spellName;
   if(curLevel) parent_id = find_parent(graph, curLevel);
-  printf("  -- parent id %d %d\n", parent_id, curLevel);
   vd->treeLevel = curLevel;
   vd->id = id;
-  printf(" ### id %d ### \n ", id);
   vd->parent_id = parent_id;
-  printf(" 3 ");
   vd -> scope = scope;
   
   switch(cursorKind) {
@@ -312,7 +295,6 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       md.id = id;
       md.isFunction = clang_Cursor_isMacroFunctionLike(cursor);
       int dparent_id = find_data_parent(graph, vd);
-      printf("  DDG-- DATA PARENT ID: %d\n", dparent_id);
       vd->dataParent = dparent_id;
       this->macrosLoc.push_back(md);
     } break;
@@ -350,7 +332,6 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       std::string typeName = getTypeSpell(cursorType);
       vd->typeName = typeName;
       int dparent_id = find_data_parent(graph, vd);
-      printf("  DDG-- DATA PARENT ID: %d\n", dparent_id);
       vd->dataParent = dparent_id;
     } break;
     case CXCursor_TypedefDecl: {
@@ -386,13 +367,12 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   }
 
   if(errorSpell.size()) {
-    printf("\n#=== THIS LOCATIONS IS IN ERROR LIST ===#\n");
     vd->isError = true;
     vd->errorSpelling = errorSpell;
   }
 
-  std::cout << std::string( curLevel, '-' ) << std::to_string(scope) << " " << getCursorKindName(
-  cursorKind ) << " (" << getCursorSpelling( cursor ) << ")\n";
+  //std::cout << std::string( curLevel, '-' ) << std::to_string(scope) << " " << getCursorKindName(
+  // cursorKind ) << " (" << getCursorSpelling( cursor ) << ")\n";
  
   id++;
   this->curLevel++;
@@ -411,7 +391,6 @@ std::vector<errorLoc> parseUnit::diagnoseForErrors() {
   CXDiagnosticSet err_set = clang_getDiagnosticSetFromTU(tu);
   std::vector<errorLoc> errors;
   int err_num = clang_getNumDiagnosticsInSet(err_set);
-  printf("  number of mistakes: %d\n", err_num);
   for(int i = 0; i < err_num; i++) {
     CXDiagnostic cxd = clang_getDiagnosticInSet(err_set, i);
     CXSourceLocation dsloc = clang_getDiagnosticLocation(cxd);
@@ -424,7 +403,6 @@ std::vector<errorLoc> parseUnit::diagnoseForErrors() {
     clang_disposeDiagnostic(cxd);
 
     errorLoc err(dloc, spelling);
-    printf(" err %d: %s\n", i, err.spelling.c_str());
     errors.push_back(err);
   }
   clang_disposeDiagnosticSet(err_set);
@@ -439,8 +417,8 @@ std::vector<visitorData> parseUnit::parse()
   //CXTranslationUnit tu = clang_createTranslationUnit( index, "hello.cpp" );
  
   char* arg1 = "-x";
-  char* arg2 = "c";
-  char* arg3 = "-std=c99";
+  char* arg2 = "c++";
+  char* arg3 = "-std=c++17";
   char* arg4 = "-E";
   char* arg5 = "-I/usr/lib/gcc/x86_64-linux-gnu/12/include";
   const char** cl_args = (const char**)malloc(5 * sizeof(char*));
@@ -449,7 +427,6 @@ std::vector<visitorData> parseUnit::parse()
   cl_args[2] = arg3;
   cl_args[3] = arg4;
   cl_args[4] = arg5;
-  printf(" starting with args %s %s %s %s %s", cl_args[0], cl_args[1], cl_args[2], cl_args[3], cl_args[4]);
 
   tu = clang_parseTranslationUnit(
     index,
@@ -458,7 +435,6 @@ std::vector<visitorData> parseUnit::parse()
     CXTranslationUnit_None | CXTranslationUnit_DetailedPreprocessingRecord); //Parse "file.cpp" 
 
   if( !tu ) {
-    printf("  !tu  ");
     return std::vector<visitorData>();
   }
 
@@ -475,11 +451,15 @@ std::vector<visitorData> parseUnit::parse()
   clang_disposeTranslationUnit( tu );
   clang_disposeIndex( index );
 
-  for(auto el: graph) {
-    printf("%d %s %s", el.treeLevel, el.kindName.c_str(), el.spellName.c_str());
-  }
+  std::string filename = "asg_graph.dot";
 
-  printf("\ndot: \n%s\n", to_dot().c_str());
+  std::ofstream outFile(filename);
+  if (outFile.is_open()) {
+    outFile << to_dot().c_str();
+    outFile.close();
+  } else {
+    std::cerr << "Unable to open file " << filename << "\n";
+  }
 
   return graph;
 }
