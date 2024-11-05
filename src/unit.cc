@@ -381,19 +381,19 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
     vd->errorSpelling = errorSpell;
   }
 
-  //std::cout << std::string( curLevel, '-' ) << std::to_string(scope) << " " << getCursorKindName(
-  // cursorKind ) << " (" << getCursorSpelling( cursor ) << ")\n";
+  std::cout << std::string( curLevel, '-' ) << " | "<< std::to_string(scope) <<  " | " << legacyScope << " " << getCursorKindName(
+  cursorKind ) << " (" << getCursorSpelling( cursor ) << ")\n";
  
   id++;
   this->curLevel++;
-  
-  //if(foundFunc) {
-  //  legacyScope = scope;
-  // }
 
-  //if(scope == legacyScope && isTargetFunc) {
+  if(foundFunc) {
+    legacyScope = scope;
+  }
+
+  if(scope == legacyScope && isTargetFunc) {
     graph.push_back(*vd);
-  //}
+  }
   clang_visitChildren( cursor,
                        parseUnit::visitorHelper,
                        this ); 
