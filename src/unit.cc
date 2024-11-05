@@ -4,7 +4,9 @@
 
 std::string parseUnit::to_dot() {
   std::string dot = "digraph graphname {\nnode [shape=record];\n";
-  
+  std::vector<std::pair<int, int>> pairs;
+  std::vector<std::pair<int, int>> dpairs;
+  int from, to;
   // state all nodes
   for(visitorData el: this->legacyGraph) {
     // node name
@@ -24,6 +26,9 @@ std::string parseUnit::to_dot() {
         label.append(el.errorSpelling);
       }
       label.append("}");
+      if (el.spellName == this->targetName) {
+        label.append(" \"color=\"red\" style=\"filled\" fillcolor=\"white");
+      } 
     }
     else {
       label.append(el.kindName);
@@ -39,23 +44,46 @@ std::string parseUnit::to_dot() {
   // draw connections
   for(int i = 1; i < this->legacyGraph.size(); i++) {
     if(legacyGraph[i].parent_id >= 0) {
-      std::string conn = std::to_string(legacyGraph[i].parent_id);
-      conn.append(" -> ");
-      conn.append(std::to_string(legacyGraph[i].id));
-      conn.append(";\n");
-      dot.append(conn);
+      from = legacyGraph[i].parent_id;
+      to = legacyGraph[i].id;
+      bool found_duplicate = false;
+      for(auto p: pairs) {
+        if(p.first == from && p.second == to) {
+          found_duplicate = true;
+        }
+      }
+
+      pairs.push_back(std::pair<int, int>(from ,to));
+      if(!found_duplicate) {
+        std::string conn = std::to_string(legacyGraph[i].parent_id);
+        conn.append(" -> ");
+        conn.append(std::to_string(legacyGraph[i].id));
+        conn.append(";\n");
+        dot.append(conn);
+      }
     }
   }
 
   // draw data flow connections
   for(int i = 0; i < this->legacyGraph.size(); i++) {
     if(legacyGraph[i].dataParent != -1) {
-      std::string conn = std::to_string(legacyGraph[i].id);
-      conn.append(" -> ");
-      conn.append(std::to_string(legacyGraph[i].dataParent));
-      conn.append("[style=dashed];");
-      conn.append("\n");
-      dot.append(conn);
+      from = legacyGraph[i].id; 
+      to = legacyGraph[i].dataParent;
+      bool found_duplicate = false;
+      for(auto p: dpairs) {
+        if(p.first == from && p.second == to) {
+          found_duplicate = true;
+        }
+      }
+      dpairs.push_back(std::pair<int, int>(from, to));
+      if(!found_duplicate) {
+        std::string conn = std::to_string(legacyGraph[i].id);
+        conn.append(" -> ");
+        conn.append(std::to_string(legacyGraph[i].dataParent));
+        conn.append("[style=dashed];");
+        conn.append("\n");
+        dot.append(conn);
+      }
     }
   }
 
@@ -274,7 +302,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   std::string kindName = getCursorKindName(cursorKind);
   std::string spellName = getCursorSpelling(cursor); 
   std::string errorSpell = getErrorSpelling(loc, errors);
-  
+   
   bool foundFunc = false;
   bool isTargetFunc = spellName == this->targetName ? true : false;
 
@@ -286,7 +314,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   vd->dataParent = -1;
   vd->kindName = kindName;
   vd->spellName = spellName;
-  if(curLevel) parent_id = find_parent(legacyGraph, curLevel);
+  if(curLevel) parent_id = find_parent(graph, curLevel);
   vd->treeLevel = curLevel;
   vd->id = id;
   vd->parent_id = parent_id;
@@ -326,6 +354,9 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       std::string typeName = getTypeSpell(cursorType);
       currentScopeChildren.clear();
       vd->typeName = typeName;
+      if(spellName == targetName) {
+        foundFunc = true;
+      }
       scope++;
     } break;
     case CXCursor_StringLiteral: {
@@ -385,7 +416,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   if(foundFunc) {
     this->legacyScope = scope;
   }
-  std::cout << std::string( curLevel, '-' ) << " | "<< std::to_string(scope) <<  " | " << legacyScope << " " << getCursorKindName(
+  std::cout << std::string( curLevel, '-' ) << " | "<< std::to_string(scope) <<  " | parent = "  << std::to_string(vd->parent_id) << " | data_parent = " << vd->dataParent << " "<< legacyScope << " " << getCursorKindName(
   cursorKind ) << " (" << getCursorSpelling( cursor ) << ")\n";
  
   id++;
