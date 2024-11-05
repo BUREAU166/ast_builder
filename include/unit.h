@@ -27,11 +27,12 @@ public:
   std::vector<visitorData> graph;
   char* filename;
   char* path;
+  char* targetName;
   unsigned int curLevel;
   CXCursor currParent;
   std::vector<macroDef> macrosLoc;
 
-  parseUnit(char* filename) {
+  parseUnit(char* filename, char* target) {
     this->id = 0; 
     this->scope = 0; 
     this->diags = 0;
@@ -39,6 +40,7 @@ public:
     this->filename = filename;
     path = (char*)malloc(200 * sizeof(char));
     this->path = realpath(filename, path);
+    this->targetName = target;
   }
 
   // visualization to graphviz ext
