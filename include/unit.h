@@ -30,6 +30,7 @@ public:
   char* targetName;
   unsigned int curLevel;
   int legacyScope;
+  int fakeParent;
   std::vector<visitorData> legacyGraph;
   CXCursor currParent;
   std::vector<visitorData> currentScopeChildren;

@@ -4,7 +4,8 @@ int superSort(int n) {
 }
 
 int filterFiles(int file) {
-  int newF = 1;
+  //int unnn = ;
+  int newF = 555556555555;
   switch(file) {
     case 1: {
       newF = superSort(file);

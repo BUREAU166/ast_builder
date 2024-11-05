@@ -238,7 +238,7 @@ std::pair<int, int> parseUnit::getCurrentLocation(CXSourceLocation location) {
     CXString cxfilename = clang_File_tryGetRealPathName(file);
     std::string filename = clang_getCString(cxfilename);
     clang_disposeString(cxfilename);
-    //printf("\n#===== CURRENT LOCATION file: %s line: %d column: %d offset: %d =====#\n", filename.c_str(), line, column, offset);
+    printf("\n#===== CURRENT LOCATION file: %s line: %d column: %d offset: %d =====#\n", filename.c_str(), line, column, offset);
   }
   return std::pair<int, int>(line, column);
 }
@@ -309,7 +309,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   unsigned int curLevel = this->curLevel;
   unsigned int nextLevel = curLevel + 1;
   int parent_id = -1;
-  
+  bool skipChild = false;
   visitorData* vd = new visitorData();
   vd->dataParent = -1;
   vd->kindName = kindName;
@@ -337,6 +337,13 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
     case CXCursor_ParmDecl: case CXCursor_VarDecl: {
       std::string typeName = getTypeSpell(cursorType);
       vd->typeName = typeName;
+      if(currentScopeChildren.size() && (!(currentScopeChildren[currentScopeChildren.size() - 1].spellName.size()))) {
+        printf("!-- MERGER RETURN %s %s\n", currentScopeChildren[currentScopeChildren.size() - 1].kindName.c_str(), vd->spellName.c_str());
+        currentScopeChildren[currentScopeChildren.size() - 1].spellName = vd->spellName;
+        currentScopeChildren[currentScopeChildren.size() - 1].typeName = vd->typeName;
+
+        skipChild = true;
+      }
     } break;
     case CXCursor_IntegerLiteral: case CXCursor_FloatingLiteral: {
       lit = getIntegerLiteral(cursor);
@@ -369,6 +376,13 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       vd->typeName = typeName;
       int dparent_id = find_data_parent(legacyGraph, vd);
       vd->dataParent = dparent_id;
+      if(currentScopeChildren.size() && currentScopeChildren[currentScopeChildren.size() - 1].kindName == "UnexposedExpr") {
+        printf("!-- MERGER RETURN %s %s\n", currentScopeChildren[currentScopeChildren.size() - 1].kindName.c_str(), vd->spellName.c_str());
+        currentScopeChildren[currentScopeChildren.size() - 1].spellName = vd->spellName;
+        currentScopeChildren[currentScopeChildren.size() - 1].typeName = vd->typeName;
+        currentScopeChildren[currentScopeChildren.size() - 1].dataParent = dparent_id;
+        skipChild = true;
+      }
     } break;
     case CXCursor_TypedefDecl: {
       std::string realType = getTypeDef(cursor);
@@ -385,7 +399,15 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
         foundFunc = true;
       }  
     } break;
-  }
+
+    case CXCursor_UnexposedExpr: {
+      if(currentScopeChildren.size() && (!(currentScopeChildren[currentScopeChildren.size() - 1].spellName.size()))) {
+        printf("!-- MERGER RETURN %s %s\n", currentScopeChildren[currentScopeChildren.size() - 1].kindName.c_str(), vd->spellName.c_str());
+        currentScopeChildren[currentScopeChildren.size() - 1].spellName = vd->spellName;
+        skipChild = true;
+      }
+    } break;
+  } 
   
   // maybe its in macro
   // @TODO UGLYYYYY EWWW
@@ -409,6 +431,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   }
 
   if(errorSpell.size()) {
+    printf("THIS IS ERROR %s \n", vd->kindName.c_str());
     vd->isError = true;
     vd->errorSpelling = errorSpell;
   }
@@ -428,8 +451,10 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
     }
   }
 
-  currentScopeChildren.push_back(*vd);
-  graph.push_back(*vd);
+  if(!skipChild) {
+    currentScopeChildren.push_back(*vd);
+    graph.push_back(*vd);
+  }
 
   clang_visitChildren( cursor,
                        parseUnit::visitorHelper,
@@ -444,6 +469,7 @@ std::vector<errorLoc> parseUnit::diagnoseForErrors() {
   CXDiagnosticSet err_set = clang_getDiagnosticSetFromTU(tu);
   std::vector<errorLoc> errors;
   int err_num = clang_getNumDiagnosticsInSet(err_set);
+  printf("error number %d\n", err_num);
   for(int i = 0; i < err_num; i++) {
     CXDiagnostic cxd = clang_getDiagnosticInSet(err_set, i);
     CXSourceLocation dsloc = clang_getDiagnosticLocation(cxd);
@@ -451,7 +477,7 @@ std::vector<errorLoc> parseUnit::diagnoseForErrors() {
 
     CXString spell = clang_getDiagnosticSpelling(cxd);
     std::string spelling = clang_getCString( spell );
-  
+    printf(" ERROR desc %s %d %d \n", spelling.c_str(), dloc.first, dloc.second); 
     clang_disposeString( spell );
     clang_disposeDiagnostic(cxd);
 
