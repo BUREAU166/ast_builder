@@ -24,9 +24,6 @@ std::string parseUnit::to_dot() {
         label.append(el.errorSpelling);
       }
       label.append("}");
-      if (el.spellName == this->targetName) {
-        label.append(" \"color=\"red\" style=\"filled\" fillcolor=\"white");
-      }
     }
     else {
       label.append(el.kindName);
@@ -351,11 +348,11 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       //printf("  TYPEREF: : %s %d\n", realType.c_str(), dparent_id);
       vd->dataParent = dparent_id;
     } break;
-    // case CXCursor_CallExpr: {
-    //   if(vd->spellName == targetName) {
-    //     foundFunc = true;
-    //   }  
-    // } break;
+    case CXCursor_CallExpr: {
+      if(vd->spellName == targetName) {
+        foundFunc = true;
+      }  
+    } break;
   }
   
   // maybe its in macro
@@ -384,19 +381,19 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
     vd->errorSpelling = errorSpell;
   }
 
-  // std::cout << std::string( curLevel, '-' ) << " | "<< std::to_string(scope) <<  " | " << legacyScope << " " << getCursorKindName(
-  // cursorKind ) << " (" << getCursorSpelling( cursor ) << ")\n";
+  std::cout << std::string( curLevel, '-' ) << " | "<< std::to_string(scope) <<  " | " << legacyScope << " " << getCursorKindName(
+  cursorKind ) << " (" << getCursorSpelling( cursor ) << ")\n";
  
   id++;
   this->curLevel++;
 
-  // if(foundFunc) {
-  //   legacyScope = scope;
-  // }
+  if(foundFunc) {
+    legacyScope = scope;
+  }
 
-  // if(scope == legacyScope && isTargetFunc) {
+  if(scope == legacyScope && isTargetFunc) {
     graph.push_back(*vd);
-  //}
+  }
   clang_visitChildren( cursor,
                        parseUnit::visitorHelper,
                        this ); 
