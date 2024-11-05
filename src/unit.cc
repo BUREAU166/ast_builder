@@ -274,6 +274,11 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   std::string kindName = getCursorKindName(cursorKind);
   std::string spellName = getCursorSpelling(cursor); 
   std::string errorSpell = getErrorSpelling(loc, errors);
+  
+  bool foundFunc = false;
+  int legacyScope = -1;
+  bool isTargetFunc = spellName == this->targetName ? true : false;
+
   unsigned int curLevel = this->curLevel;
   unsigned int nextLevel = curLevel + 1;
   int parent_id = -1;
@@ -343,6 +348,11 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       //printf("  TYPEREF: : %s %d\n", realType.c_str(), dparent_id);
       vd->dataParent = dparent_id;
     } break;
+    case CXCursor_CallExpr: {
+      if(vd->spellName == targetName) {
+        foundFunc = true;
+      }  
+    } break;
   }
   
   // maybe its in macro
@@ -376,8 +386,14 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
  
   id++;
   this->curLevel++;
-  graph.push_back(*vd);
+  
+  //if(foundFunc) {
+  //  legacyScope = scope;
+  // }
 
+  //if(scope == legacyScope && isTargetFunc) {
+    graph.push_back(*vd);
+  //}
   clang_visitChildren( cursor,
                        parseUnit::visitorHelper,
                        this ); 
