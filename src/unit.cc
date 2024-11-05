@@ -6,7 +6,7 @@ std::string parseUnit::to_dot() {
   std::string dot = "digraph graphname {\nnode [shape=record];\n";
   
   // state all nodes
-  for(visitorData el: this->graph) {
+  for(visitorData el: this->legacyGraph) {
     // node name
     dot.append(std::to_string(el.id));
     std::string label = " [label=\"";
@@ -37,22 +37,22 @@ std::string parseUnit::to_dot() {
   }
 
   // draw connections
-  for(int i = 1; i < this->graph.size(); i++) {
-    if(graph[i].parent_id >= 0) {
-      std::string conn = std::to_string(graph[i].parent_id);
+  for(int i = 1; i < this->legacyGraph.size(); i++) {
+    if(legacyGraph[i].parent_id >= 0) {
+      std::string conn = std::to_string(legacyGraph[i].parent_id);
       conn.append(" -> ");
-      conn.append(std::to_string(graph[i].id));
+      conn.append(std::to_string(legacyGraph[i].id));
       conn.append(";\n");
       dot.append(conn);
     }
   }
 
   // draw data flow connections
-  for(int i = 0; i < this->graph.size(); i++) {
-    if(graph[i].dataParent != -1) {
-      std::string conn = std::to_string(graph[i].id);
+  for(int i = 0; i < this->legacyGraph.size(); i++) {
+    if(legacyGraph[i].dataParent != -1) {
+      std::string conn = std::to_string(legacyGraph[i].id);
       conn.append(" -> ");
-      conn.append(std::to_string(graph[i].dataParent));
+      conn.append(std::to_string(legacyGraph[i].dataParent));
       conn.append("[style=dashed];");
       conn.append("\n");
       dot.append(conn);
@@ -276,7 +276,6 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   std::string errorSpell = getErrorSpelling(loc, errors);
   
   bool foundFunc = false;
-  int legacyScope = -1;
   bool isTargetFunc = spellName == this->targetName ? true : false;
 
   unsigned int curLevel = this->curLevel;
@@ -287,7 +286,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   vd->dataParent = -1;
   vd->kindName = kindName;
   vd->spellName = spellName;
-  if(curLevel) parent_id = find_parent(graph, curLevel);
+  if(curLevel) parent_id = find_parent(legacyGraph, curLevel);
   vd->treeLevel = curLevel;
   vd->id = id;
   vd->parent_id = parent_id;
@@ -299,7 +298,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       md.loc = loc;
       md.id = id;
       md.isFunction = clang_Cursor_isMacroFunctionLike(cursor);
-      int dparent_id = find_data_parent(graph, vd);
+      int dparent_id = find_data_parent(legacyGraph, vd);
       vd->dataParent = dparent_id;
       this->macrosLoc.push_back(md);
     } break;
@@ -325,6 +324,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
     } break;
     case CXCursor_FunctionDecl: {
       std::string typeName = getTypeSpell(cursorType);
+      currentScopeChildren.clear();
       vd->typeName = typeName;
       scope++;
     } break;
@@ -336,7 +336,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       //printf(";;;;;;;;;;;;;;;;;;;;;DeclRefExpr; %s %s\n", kindName.c_str(), vd->spellName.c_str());
       std::string typeName = getTypeSpell(cursorType);
       vd->typeName = typeName;
-      int dparent_id = find_data_parent(graph, vd);
+      int dparent_id = find_data_parent(legacyGraph, vd);
       vd->dataParent = dparent_id;
     } break;
     case CXCursor_TypedefDecl: {
@@ -344,12 +344,13 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       vd->typeName = realType;
     } break;
     case CXCursor_TypeRef: {
-      int dparent_id = find_data_parent(graph, vd);
+      int dparent_id = find_data_parent(legacyGraph, vd);
       //printf("  TYPEREF: : %s %d\n", realType.c_str(), dparent_id);
       vd->dataParent = dparent_id;
     } break;
     case CXCursor_CallExpr: {
-      if(vd->spellName == targetName) {
+      printf("!-- COMPARE %s to %s\n", spellName.c_str(), targetName);
+      if(spellName == targetName) {
         foundFunc = true;
       }  
     } break;
@@ -380,20 +381,25 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
     vd->isError = true;
     vd->errorSpelling = errorSpell;
   }
-
+  
+  if(foundFunc) {
+    this->legacyScope = scope;
+  }
   std::cout << std::string( curLevel, '-' ) << " | "<< std::to_string(scope) <<  " | " << legacyScope << " " << getCursorKindName(
   cursorKind ) << " (" << getCursorSpelling( cursor ) << ")\n";
  
   id++;
   this->curLevel++;
 
-  if(foundFunc) {
-    legacyScope = scope;
+  if(scope == legacyScope || isTargetFunc) {
+    for(auto el: currentScopeChildren) {
+      legacyGraph.push_back(el);
+    }
   }
 
-  if(scope == legacyScope && isTargetFunc) {
-    graph.push_back(*vd);
-  }
+  currentScopeChildren.push_back(*vd);
+  graph.push_back(*vd);
+
   clang_visitChildren( cursor,
                        parseUnit::visitorHelper,
                        this ); 

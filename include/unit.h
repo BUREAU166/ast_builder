@@ -29,7 +29,10 @@ public:
   char* path;
   char* targetName;
   unsigned int curLevel;
+  int legacyScope;
+  std::vector<visitorData> legacyGraph;
   CXCursor currParent;
+  std::vector<visitorData> currentScopeChildren;
   std::vector<macroDef> macrosLoc;
 
   parseUnit(char* filename, char* target) {
@@ -41,6 +44,7 @@ public:
     path = (char*)malloc(200 * sizeof(char));
     this->path = realpath(filename, path);
     this->targetName = target;
+    this->legacyScope = -1;
   }
 
   // visualization to graphviz ext
