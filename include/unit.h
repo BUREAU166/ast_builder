@@ -48,6 +48,11 @@ public:
     this->legacyScope = -1;
   }
 
+  parseUnit(const std::string& filename, const std::string& target)
+    : parseUnit(const_cast<char*>(filename.c_str()), const_cast<char*>(target.c_str())){
+
+  }
+
   // visualization to graphviz ext
   
   std::string to_dot();

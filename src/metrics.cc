@@ -19,8 +19,8 @@ Metrics::Metrics(const std::vector<std::string>& files) {
             return CXChildVisit_Recurse;
         }, &fileMetrics);
 
-        fileMetricsMap[file] = fileMetrics;  // Store metrics per file
-        aggregateMetrics(fileMetrics);  // Update global metrics
+        fileMetricsMap[file] = fileMetrics;
+        aggregateMetrics(fileMetrics);
         clang_disposeTranslationUnit(unit);
     }
 
