@@ -2,50 +2,75 @@
 #include <fstream>
 #include <string>
 
-std::string parseUnit::to_dot() {
-  std::string dot = "digraph graphname {\nnode [shape=record];\n";
+std::string parseUnit::to_sub_dot() {
+  std::vector<scopedBlock> cut = cutUnusedByTarget();
+  this->scopedGraph = cut;
+  //printf("scopedGraph length: %d\n", scopedGraph.size());
+  std::string graphTitle = "digraph G {\ncompound=true;\n";
+  for(int i = 0; i < cut.size(); i++) {
+    std::string graphName = "cluster_" + std::to_string(i);
+    //printf("%s\n\n", to_dot(el.graph, el.graph[0].spellName, true).c_str());
+    graphTitle.append(to_dot(cut[i].graph, graphName, true));
+    graphTitle.append("\n");
+  }
+  graphTitle.append("}");
+
+  return graphTitle;
+}
+
+std::string parseUnit::to_dot(std::vector<visitorData> _graph, std::string name, bool withSub) {
+  std::string graphClass = withSub ? "subgraph" : "digraph";
+  std::string dot  = graphClass + " " + name  +  " {\nnode [shape=record];\n";
   std::vector<std::pair<int, int>> pairs;
   std::vector<std::pair<int, int>> dpairs;
+  std::vector<int> declars;
   int from, to;
   // state all nodes
-  for(visitorData el: this->legacyGraph) {
+  for(visitorData el: _graph) {
     // node name
-    dot.append(std::to_string(el.id));
-    std::string label = " [label=\"";
-    if(el.spellName.size()) {
-      label.append("{");
-      label.append(el.kindName); 
-      label.append(" | ");
-      label.append(el.spellName);
-      if(el.typeName.size()) {
+    bool found_duplicate = false;
+    for(int eid: declars) {
+      if(el.id == eid) found_duplicate = true;
+    }
+    declars.push_back(el.id);
+    if(!found_duplicate) {
+      dot.append(name + std::to_string(el.id));
+      std::string label = " [label=\"";
+      if(el.spellName.size()) {
+        label.append("{");
+        label.append(el.kindName); 
         label.append(" | ");
-        label.append(el.typeName);
+        label.append(el.spellName);
+        if(el.typeName.size()) {
+          label.append(" | ");
+          label.append(el.typeName);
+        }
+        if(el.errorSpelling.size()) {
+          label.append(" | ");
+          label.append(el.errorSpelling);
+        }
+        label.append("}");
+        if (el.spellName == this->targetName) {
+          label.append(" \"color=\"red\" style=\"filled\" fillcolor=\"white");
+        } 
       }
-      if(el.errorSpelling.size()) {
-        label.append(" | ");
-        label.append(el.errorSpelling);
-      }
-      label.append("}");
-      if (el.spellName == this->targetName) {
-        label.append(" \"color=\"red\" style=\"filled\" fillcolor=\"white");
+      else {
+        label.append(el.kindName);
+        label.append("\"][shape=\"oval");
       } 
+      if(el.isError) {
+        label.append("\"][color=\"red");
+      }
+      label.append("\"];\n");
+      dot.append(label);
     }
-    else {
-      label.append(el.kindName);
-      label.append("\"][shape=\"oval");
-    } 
-    if(el.isError) {
-      label.append("\"][color=\"red");
-    }
-    label.append("\"];\n");
-    dot.append(label);
   }
 
   // draw connections
-  for(int i = 1; i < this->legacyGraph.size(); i++) {
-    if(legacyGraph[i].parent_id >= 0) {
-      from = legacyGraph[i].parent_id;
-      to = legacyGraph[i].id;
+  for(int i = 1; i < _graph.size(); i++) {
+    if(_graph[i].parent_id >= 0) {
+      from = _graph[i].controlParent;
+      to = _graph[i].id;
       bool found_duplicate = false;
       for(auto p: pairs) {
         if(p.first == from && p.second == to) {
@@ -55,20 +80,30 @@ std::string parseUnit::to_dot() {
 
       pairs.push_back(std::pair<int, int>(from ,to));
       if(!found_duplicate) {
-        std::string conn = std::to_string(legacyGraph[i].parent_id);
-        conn.append(" -> ");
-        conn.append(std::to_string(legacyGraph[i].id));
-        conn.append(";\n");
-        dot.append(conn);
+        if(!_graph[i].spellName.size() || graph[i].kindName == "ReturnStmt") {
+          std::string conn = name + std::to_string(_graph[i].controlParent);
+          conn.append(" -> ");
+          conn.append(name + std::to_string(_graph[i].id));
+          conn.append(";\n");
+          dot.append(conn);
+        }
+        else {
+          std::string conn = name + std::to_string(_graph[i-1].id);
+          conn.append(" -> ");
+          conn.append(name + std::to_string(_graph[i].id));
+          conn.append(";\n");
+          dot.append(conn);
+        } 
       }
     }
   }
 
   // draw data flow connections
-  for(int i = 0; i < this->legacyGraph.size(); i++) {
-    if(legacyGraph[i].dataParent != -1) {
-      from = legacyGraph[i].id; 
-      to = legacyGraph[i].dataParent;
+  /*
+  for(int i = 0; i < _graph.size(); i++) {
+    if(_graph[i].dataParent != -1) {
+      from = _graph[i].id; 
+      to = _graph[i].dataParent;
       bool found_duplicate = false;
       for(auto p: dpairs) {
         if(p.first == from && p.second == to) {
@@ -77,16 +112,16 @@ std::string parseUnit::to_dot() {
       }
       dpairs.push_back(std::pair<int, int>(from, to));
       if(!found_duplicate) {
-        std::string conn = std::to_string(legacyGraph[i].id);
+        std::string conn = _graph[0].spellName + std::to_string(_graph[i].id);
         conn.append(" -> ");
-        conn.append(std::to_string(legacyGraph[i].dataParent));
+        conn.append(_graph[0].spellName + std::to_string(_graph[i].dataParent));
         conn.append("[style=dashed];");
         conn.append("\n");
         dot.append(conn);
       }
     }
   }
-
+*/
   dot.append("\n}");
   return dot;
 }
@@ -112,34 +147,40 @@ std::string parseUnit::getCursorSpelling( CXCursor cursor )
 std::string parseUnit::getBinaryOperator(CXCursor cursor) {
   CXToken *tokens;
   unsigned numTokens;
-  std::string tok = "\\";
+  std::string tok = "";
   CXSourceRange range = clang_getCursorExtent(cursor);
   clang_tokenize(this->tu, range, &tokens, &numTokens);
 
   // @TODO FIX 
+  /*
   CXString s = clang_getTokenSpelling(tu, tokens[1]);
   const char* str = clang_getCString(s);
   tok.append(std::string(str));
   clang_disposeString(s);
-
-  /*
+  */
   for(unsigned i=0; i<numTokens; i++) {
     CXString s = clang_getTokenSpelling(tu, tokens[i]);
     const char* str = clang_getCString(s);
-    printf("   got %s\n", str);
-    tok = std::string(str);
+    //printf("   got %s\n", str);
+    tok += std::string(str);
     clang_disposeString(s);
   }
-  */
+
+  std::string rr = "";
+  for(char& c: tok) {
+    if((c == '<') || (c == '>')) rr.append("\\");
+    rr += c;
+  }
+
   clang_disposeTokens(tu, tokens, numTokens);
 
-  return tok;
+  return rr;
 }
 
 std::string parseUnit::getUnaryOperator(CXCursor cursor) {
   CXToken *tokens;
   unsigned numTokens;
-  std::string tok = "\\";
+  std::string tok = "";
   CXSourceRange range = clang_getCursorExtent(cursor);
   clang_tokenize(this->tu, range, &tokens, &numTokens);
 
@@ -147,13 +188,14 @@ std::string parseUnit::getUnaryOperator(CXCursor cursor) {
   /*
   CXString s = clang_getTokenSpelling(tu, tokens[1]);
   const char* str = clang_getCString(s);
-  printf("   got UNARY %s\n", str);
+  //printf("   got UNARY %s\n", str);
   tok.append(std::string(str));
   clang_disposeString(s);
   */
   for(unsigned i=0; i<numTokens; i++) {
     CXString s = clang_getTokenSpelling(tu, tokens[i]);
     const char* str = clang_getCString(s);
+    if(!strcmp(str, "<") || !strcmp(str, ">")) tok.append("\\");
     tok.append(std::string(str));
     clang_disposeString(s);
   }
@@ -161,7 +203,7 @@ std::string parseUnit::getUnaryOperator(CXCursor cursor) {
   for(unsigned i=0; i<numTokens; i++) {
     CXString s = clang_getTokenSpelling(tu, tokens[i]);
     const char* str = clang_getCString(s);
-    printf("   got %s\n", str);
+    //printf("   got %s\n", str);
     tok = std::string(str);
     clang_disposeString(s);
   }
@@ -223,9 +265,14 @@ std::string parseUnit::getMacrosText(CXCursor cursor) {
 std::string parseUnit::getTypeSpell(CXType cxType) {
   CXString typeName  = clang_getTypeSpelling(cxType);
   std::string result = clang_getCString( typeName );
+  std::string rr = "";
+  for(char& c: result) {
+    if((c == '<') || (c == '>')) rr.append("\\");
+    rr += c;
+  }
 
   clang_disposeString( typeName );
-  return result;
+  return rr;
 }
 
 std::pair<int, int> parseUnit::getCurrentLocation(CXSourceLocation location) {
@@ -238,7 +285,7 @@ std::pair<int, int> parseUnit::getCurrentLocation(CXSourceLocation location) {
     CXString cxfilename = clang_File_tryGetRealPathName(file);
     std::string filename = clang_getCString(cxfilename);
     clang_disposeString(cxfilename);
-    printf("\n#===== CURRENT LOCATION file: %s line: %d column: %d offset: %d =====#\n", filename.c_str(), line, column, offset);
+    //printf("\n#===== CURRENT LOCATION file: %s line: %d column: %d offset: %d =====#\n", filename.c_str(), line, column, offset);
   }
   return std::pair<int, int>(line, column);
 }
@@ -260,6 +307,96 @@ std::string parseUnit::getCurrentFilePath(CXSourceLocation location) {
   }
 
   return filename;
+}
+
+// get the names of the functions that our TARGET function calls/uses
+std::vector<scopedBlock> parseUnit::cutUnusedByTarget() {
+  std::vector<scopedBlock> scopes;
+  std::vector<visitorData> currGraph;
+  scopedBlock sb;
+  bool skipFunc = false;
+
+  std::vector<std::string> deps;
+
+  bool isTarget = false;
+  for(auto el: graph) {
+    if(el.kindName == "FunctionDecl") {
+      //printf(" !-- WATCHING FUNC %s\n --! ", el.spellName.c_str());
+      if(el.spellName == targetName) {
+        isTarget = true;
+        //printf("found target %s\n", el.spellName.c_str());
+      }
+      else {
+        //printf(" now false %s\n", el.spellName.c_str());
+        isTarget = false;
+      }
+    }
+    if(el.kindName == "CallExpr") {
+      //printf("call to %s| %d\n", el.spellName.c_str(), isTarget);
+    }
+    if(el.kindName == "CallExpr" && isTarget) {
+      //printf("depend : %s\n", el.spellName.c_str());
+      deps.push_back(el.spellName); 
+    }
+    if(isTarget) {
+      currGraph.push_back(el);
+    }
+  }
+
+  sb.name = targetName;
+  sb.graph = currGraph;
+  scopes.push_back(sb);
+
+  //printf("pushed %s\n", currGraph[0].spellName.c_str());
+
+  currGraph.clear();
+
+  bool found = false;
+  for(auto el: graph) {
+    if(el.kindName == "FunctionDecl") {
+      //printf("new scope %s | found %d\n", el.spellName.c_str(), found);
+      if(currGraph.size() && found) 
+      {
+        sb.name = currGraph[0].spellName;
+        sb.graph = currGraph; 
+        //printf(" pushed %s \n", currGraph[0].spellName.c_str());
+        scopes.push_back(sb);
+        found = false;
+        currGraph.clear();
+      }
+      if(!found) {
+        currGraph.clear();
+      }
+      if(el.spellName == targetName) {
+        found = true;
+      }
+      for(auto name: deps) {
+        if(el.spellName == name)  {
+          found = true;
+        }
+      }
+      
+
+    }
+    currGraph.push_back(el);
+  }  
+  
+  /*
+  if(currGraph.size()) {
+    sb.name = currGraph[0].spellName;
+    sb.graph = currGraph; 
+    scopes.push_back(sb);
+    currGraph.clear();
+  }
+  */
+  return scopes;
+}
+
+void parseUnit::checkScopedGraph() {
+  std::vector<scopedBlock> cut = cutUnusedByTarget();
+  for(scopedBlock sb: cut) {
+    //printf(" scope %s | first el %s\n", sb.name.c_str(), sb.graph[0].spellName.c_str());
+  }
 }
 
 CXChildVisitResult parseUnit::visitorHelper(CXCursor cursor, CXCursor parent, void* client_data) {
@@ -285,7 +422,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
     
     std::string kindName = getCursorKindName(cursorKind);
     std::string spellName = getCursorSpelling(cursor);  
-    printf("  -- cursorType: %d\n", cursorType.kind); 
+    //printf("  -- cursorType: %d\n", cursorType.kind); 
     if(kindName.size()) printf("  -- cursorKind: %d | kindName: %s\n", cursorKind, kindName.c_str());
     if(spellName.size()) printf("  -- spellName: %s\n", spellName.c_str());
     */
@@ -315,12 +452,25 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   vd->kindName = kindName;
   vd->spellName = spellName;
   if(curLevel) parent_id = find_parent(graph, curLevel);
+  //printf("after parent_id\n");
   vd->treeLevel = curLevel;
   vd->id = id;
   vd->parent_id = parent_id;
   vd -> scope = scope;
   
   switch(cursorKind) {
+    case CXCursor_ParenExpr:  {
+      return CXChildVisit_Continue;
+    } break;
+    case CXCursor_UnexposedExpr: {
+      if(currentScopeChildren.size() && (currentScopeChildren[currentScopeChildren.size() - 1].kindName == "ReturnStmt")) {
+        currentScopeChildren[currentScopeChildren.size() - 1].spellName += spellName;
+        graph[graph.size() - 1].spellName += spellName;
+        //legacyGraph[legacyGraph.size() - 1].spellName += spellName;
+
+      }
+      return CXChildVisit_Continue;
+    } break;
     case CXCursor_MacroExpansion: {
       macroDef md;
       md.loc = loc;
@@ -337,17 +487,28 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
     case CXCursor_ParmDecl: case CXCursor_VarDecl: {
       std::string typeName = getTypeSpell(cursorType);
       vd->typeName = typeName;
+      /*
       if(currentScopeChildren.size() && (!(currentScopeChildren[currentScopeChildren.size() - 1].spellName.size()))) {
-        printf("!-- MERGER RETURN %s %s\n", currentScopeChildren[currentScopeChildren.size() - 1].kindName.c_str(), vd->spellName.c_str());
+        //printf("!-- MERGER RETURN %s %s\n", currentScopeChildren[currentScopeChildren.size() - 1].kindName.c_str(), vd->spellName.c_str());
         currentScopeChildren[currentScopeChildren.size() - 1].spellName = vd->spellName;
         currentScopeChildren[currentScopeChildren.size() - 1].typeName = vd->typeName;
 
         skipChild = true;
       }
+      */
     } break;
     case CXCursor_IntegerLiteral: case CXCursor_FloatingLiteral: {
-      lit = getIntegerLiteral(cursor);
-      if(lit.size()) vd->spellName = lit;
+      if(currentScopeChildren.size() && (currentScopeChildren[currentScopeChildren.size() - 1].kindName == "VarDecl")) {
+        lit = getIntegerLiteral(cursor);
+        if(lit.size()) vd->spellName = lit;
+        std::string opb = " = ";
+        opb.append(lit);
+        //printf("INTDECL %s %s\n", opb.c_str(), lit.c_str());
+        currentScopeChildren[currentScopeChildren.size() - 1].spellName += opb;
+        graph[graph.size() - 1].spellName += opb;
+        //legacyGraph[legacyGraph.size() - 1].spellName += opb;
+      }
+      return CXChildVisit_Continue;
     } break;
     case CXCursor_BinaryOperator: case CXCursor_CompoundAssignOperator: {
       op = getBinaryOperator(cursor);
@@ -358,8 +519,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       if(op.size()) vd->spellName = op;
     } break;
     case CXCursor_FunctionDecl: {
-      std::string typeName = getTypeSpell(cursorType);
-      currentScopeChildren.clear();
+      std::string typeName = getTypeSpell(cursorType); 
       vd->typeName = typeName;
       if(spellName == targetName) {
         foundFunc = true;
@@ -371,19 +531,27 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       vd->spellName = spellName;
     } break;
     case CXCursor_DeclRefExpr: {
+      return CXChildVisit_Continue;
+    } break;
+    /*
+    case CXCursor_DeclRefExpr: {
       //printf(";;;;;;;;;;;;;;;;;;;;;DeclRefExpr; %s %s\n", kindName.c_str(), vd->spellName.c_str());
       std::string typeName = getTypeSpell(cursorType);
       vd->typeName = typeName;
       int dparent_id = find_data_parent(legacyGraph, vd);
       vd->dataParent = dparent_id;
-      if(currentScopeChildren.size() && currentScopeChildren[currentScopeChildren.size() - 1].kindName == "UnexposedExpr") {
+      if(currentScopeChildren.size()) {
         printf("!-- MERGER RETURN %s %s\n", currentScopeChildren[currentScopeChildren.size() - 1].kindName.c_str(), vd->spellName.c_str());
-        currentScopeChildren[currentScopeChildren.size() - 1].spellName = vd->spellName;
-        currentScopeChildren[currentScopeChildren.size() - 1].typeName = vd->typeName;
-        currentScopeChildren[currentScopeChildren.size() - 1].dataParent = dparent_id;
+        vd->parent_id = parent_id; 
+        currentScopeChildren[currentScopeChildren.size() - 1] = *vd;
+        printf("last child %s dparent %d\n", currentScopeChildren[currentScopeChildren.size() - 1].kindName.c_str(), currentScopeChildren[currentScopeChildren.size() - 1].dataParent);
+        //currentScopeChildren[currentScopeChildren.size() - 1].spellName = vd->spellName;
+        //currentScopeChildren[currentScopeChildren.size() - 1].typeName = vd->typeName;
+        //currentScopeChildren[currentScopeChildren.size() - 1].dataParent = dparent_id;
         skipChild = true;
       }
     } break;
+    */
     case CXCursor_TypedefDecl: {
       std::string realType = getTypeDef(cursor);
       vd->typeName = realType;
@@ -394,23 +562,34 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       vd->dataParent = dparent_id;
     } break;
     case CXCursor_CallExpr: {
-      printf("!-- COMPARE %s to %s\n", spellName.c_str(), targetName);
+      //printf("!-- COMPARE %s to %s\n", spellName.c_str(), targetName);
       if(spellName == targetName) {
         foundFunc = true;
       }  
     } break;
-
+    /*
     case CXCursor_UnexposedExpr: {
-      if(currentScopeChildren.size() && (!(currentScopeChildren[currentScopeChildren.size() - 1].spellName.size()))) {
+      if(currentScopeChildren.size() && !currentScopeChildren[currentScopeChildren.size() - 1].spellName.size()) {
+        //currentScopeChildren[currentScopeChildren.size() - 1].kindName = "MERGED";
+        currentScopeChildren[currentScopeChildren.size() - 1].spellName = spellName;
+        legacyGraph[legacyGraph.size() - 1].spellName = spellName;
+        graph[graph.size() - 1].spellName = spellName;
+        
+
         printf("!-- MERGER RETURN %s %s\n", currentScopeChildren[currentScopeChildren.size() - 1].kindName.c_str(), vd->spellName.c_str());
-        currentScopeChildren[currentScopeChildren.size() - 1].spellName = vd->spellName;
-        skipChild = true;
+        //skipChild = true;
+        return CXChildVisit_Continue;
+
       }
     } break;
+    */
   } 
   
+  if(graph.size()) vd->controlParent = findControlParent(graph, vd); 
+   
   // maybe its in macro
   // @TODO UGLYYYYY EWWW
+  /*
   if(vd->dataParent == -1) {
     for(macroDef el: macrosLoc) {
       if(el.loc == loc) {
@@ -429,9 +608,9 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       }
     }
   }
-
+*/
   if(errorSpell.size()) {
-    printf("THIS IS ERROR %s \n", vd->kindName.c_str());
+    //printf("THIS IS ERROR %s \n", vd->kindName.c_str());
     vd->isError = true;
     vd->errorSpelling = errorSpell;
   }
@@ -439,9 +618,10 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   if(foundFunc) {
     this->legacyScope = scope;
   }
-  std::cout << std::string( curLevel, '-' ) << " | "<< std::to_string(scope) <<  " | parent = "  << std::to_string(vd->parent_id) << " | data_parent = " << vd->dataParent << " "<< legacyScope << " " << getCursorKindName(
+  /*
+  std::cout << std::string( curLevel, '-' ) << " | "<< std::to_string(scope) <<  " | parent = "  << std::to_string(vd->parent_id) << " | data_parent = " << vd->dataParent << " | id = " << vd->id << " "<< legacyScope << " " << getCursorKindName(
   cursorKind ) << " (" << getCursorSpelling( cursor ) << ")\n";
- 
+ */
   id++;
   this->curLevel++;
 
@@ -469,7 +649,7 @@ std::vector<errorLoc> parseUnit::diagnoseForErrors() {
   CXDiagnosticSet err_set = clang_getDiagnosticSetFromTU(tu);
   std::vector<errorLoc> errors;
   int err_num = clang_getNumDiagnosticsInSet(err_set);
-  printf("error number %d\n", err_num);
+  //printf("error number %d\n", err_num);
   for(int i = 0; i < err_num; i++) {
     CXDiagnostic cxd = clang_getDiagnosticInSet(err_set, i);
     CXSourceLocation dsloc = clang_getDiagnosticLocation(cxd);
@@ -477,7 +657,7 @@ std::vector<errorLoc> parseUnit::diagnoseForErrors() {
 
     CXString spell = clang_getDiagnosticSpelling(cxd);
     std::string spelling = clang_getCString( spell );
-    printf(" ERROR desc %s %d %d \n", spelling.c_str(), dloc.first, dloc.second); 
+    //printf(" ERROR desc %s %d %d \n", spelling.c_str(), dloc.first, dloc.second); 
     clang_disposeString( spell );
     clang_disposeDiagnostic(cxd);
 
@@ -532,6 +712,17 @@ std::vector<visitorData> parseUnit::parse()
 
   std::string filename = "asg_graph.dot";
 
+  //checkScopedGraph();
+
+  if(targetName != "") {
+    std::string dotgraph = to_sub_dot(); 
+    printf("%s\n", dotgraph.c_str());
+  }
+  else {
+    printf("%s\n", to_dot(graph, this->filename, false).c_str()); 
+  } 
+
+  /*
   std::ofstream outFile(filename);
   if (outFile.is_open()) {
     outFile << to_dot().c_str();
@@ -539,6 +730,6 @@ std::vector<visitorData> parseUnit::parse()
   } else {
     std::cerr << "Unable to open file " << filename << "\n";
   }
-
+*/
   return graph;
 }

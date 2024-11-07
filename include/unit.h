@@ -17,6 +17,12 @@ struct macroDef {
   unsigned int isFunction;
 };
 
+class scopedBlock {
+public:
+  std::string name;
+  std::vector<visitorData> graph;
+};
+
 class parseUnit {
 public:
   int id;
@@ -35,6 +41,8 @@ public:
   CXCursor currParent;
   std::vector<visitorData> currentScopeChildren;
   std::vector<macroDef> macrosLoc;
+  std::vector<scopedBlock> scopedGraph;
+  std::string scopeName;
 
   parseUnit(char* filename, char* target) {
     this->id = 0; 
@@ -48,9 +56,26 @@ public:
     this->legacyScope = -1;
   }
 
+  parseUnit(char* filename) {
+    this->id = 0; 
+    this->scope = 0; 
+    this->diags = 0;
+    this->curLevel = 0;
+    this->filename = filename;
+    path = (char*)malloc(200 * sizeof(char));
+    this->path = realpath(filename, path);
+    this->targetName = "";
+    this->legacyScope = -1;
+  }
+
   // visualization to graphviz ext
-  
-  std::string to_dot();
+  std::string to_sub_dot();
+
+  std::string to_dot(std::vector<visitorData> _graph, std::string name, bool withSub);
+
+  void checkScopedGraph();
+
+  std::vector<scopedBlock> cutUnusedByTarget();
 
   std::string getCursorKindName( CXCursorKind cursorKind );
  

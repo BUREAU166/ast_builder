@@ -12,6 +12,7 @@ public:
   std::string spellName;  // The exact name of a token (name of a function, variable)
   std::string typeName;   // Type name for typed tokens 
   int         dataParent; // Declaration id of a var 
+  int         controlParent;
   int         scope;      // Scope at which this token is available
   bool        isError;
   std::string errorSpelling;
@@ -20,6 +21,8 @@ public:
 int find_data_parent(std::vector<visitorData> graph, visitorData* vd);
 
 int find_parent(std::vector<visitorData> graph, int level);
+
+int findControlParent(std::vector<visitorData> graph, visitorData *vd);
 
 #endif
 
