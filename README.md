@@ -1,13 +1,7 @@
 # What it does 
 
-Builds Abstract Syntax Graph (in text form of *dot* or *graphviz*) for C files
-
-# Features 
-
-- Data-flow connections (cause its ASG not AST)
-- Type information (same reason)
-- Detects and connects macros to their usage (not fully)
-- Shows warnings and errors 
+Builds CFG (control-flow-graph) look-alike graph of a function and its dependencies (functions and classes that it need to be defined to work)
+Iterates through the whole supplies directory
 
 # Build 
 
