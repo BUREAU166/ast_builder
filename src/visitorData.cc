@@ -1,5 +1,60 @@
 #include "../include/visitorData.h"
 
+bool visitorData::operator==(const visitorData& rhs) const
+{
+  if(id == rhs.id) return true;
+  return false;
+}
+
+bool operator==(const visitorData& lhs, const visitorData& rhs)
+{
+  if(lhs.id == rhs.id) return true;
+  return false;
+}
+
+int findTargetParent(std::vector<std::vector<visitorData>> projGraphs, visitorData *vd) {
+  int elementIndex = -1;
+  int parentIndex = -1;
+  //printf("\n\n size %d | first id %d third id %d vd id %d \n", graph.size(), graph[0].id, graph[3].id, vd->id);
+  
+  for(auto graph: projGraphs) {
+    for(auto el: graph) {
+      if(el.spellName == vd->spellName) {
+        parentIndex = el.id;
+        break;
+      }
+    }
+  }
+
+  // //printf("elementIndex = %d for %s\n", elementIndex, vd->spellName.c_str());
+  // for(int i = vd->id - 1; i >= 0; i--) {
+  //   if(!graph[i].spellName.size() || graph[i].kindName == "FunctionDecl" || graph[i].kindName == "ClassDecl" || graph[i].kindName == "StructDecl") {
+  //     //printf("found base %d %s\n", i, graph[i].spellName.c_str());
+  //     parentIndex = graph[i].id;
+  //     break;
+  //   }
+  // }
+
+  return parentIndex;
+}
+
+int findControlParent(std::vector<visitorData> graph, visitorData *vd) {
+  int elementIndex = -1;
+  int parentIndex = -1;
+  //printf("\n\n size %d | first id %d third id %d vd id %d \n", graph.size(), graph[0].id, graph[3].id, vd->id);
+  
+  //printf("elementIndex = %d for %s\n", elementIndex, vd->spellName.c_str());
+  for(int i = vd->id - 1; i >= 0; i--) {
+    if(!graph[i].spellName.size() || graph[i].kindName == "FunctionDecl" || graph[i].kindName == "ClassDecl" || graph[i].kindName == "StructDecl") {
+      //printf("found base %d %s\n", i, graph[i].spellName.c_str());
+      parentIndex = graph[i].id;
+      break;
+    }
+  }
+
+  return parentIndex;
+}
+
 int find_data_parent(std::vector<visitorData> graph, visitorData* vd) {
   int dparent_id = -1;
   //printf("  ## searchinf parent for %s\n", vd.spellName.c_str());
@@ -63,8 +118,10 @@ int find_parent(std::vector<visitorData> graph, int level) {
   }
 
   int parent_id = 0;
-
+  //printf("find parent entr %d \n", graph.size());
   for(visitorData el: graph) {
+
+    //printf(" ? el %s | %d == %d ?", el.spellName.c_str(), el.treeLevel, level - 1);
     if(el.treeLevel == (level - 1)) {
       parent_id = el.id;
     }

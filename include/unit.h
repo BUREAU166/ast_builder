@@ -17,6 +17,12 @@ struct macroDef {
   unsigned int isFunction;
 };
 
+class scopedBlock {
+public:
+  std::string name;
+  std::vector<visitorData> graph;
+};
+
 class parseUnit {
 public:
   int id;
@@ -28,6 +34,7 @@ public:
   char* filename;
   char* path;
   char* targetName;
+  std::vector<std::string> targets;
   unsigned int curLevel;
   int legacyScope;
   int fakeParent;
@@ -35,6 +42,15 @@ public:
   CXCursor currParent;
   std::vector<visitorData> currentScopeChildren;
   std::vector<macroDef> macrosLoc;
+  std::vector<scopedBlock> scopedGraph;
+  std::string scopeName;
+  std::vector<std::string> headers;
+  bool isReadProj;
+  std::vector<std::vector<visitorData>> projGraphs;
+  std::vector<std::string> fileNames;
+  char* entryFile;
+  std::vector<std::string> savedTargets;
+  std::vector<std::pair<int, std::string>> targetNodes;
 
   parseUnit(char* filename, char* target) {
     this->id = 0; 
@@ -42,15 +58,61 @@ public:
     this->diags = 0;
     this->curLevel = 0;
     this->filename = filename;
+    this->fileNames.push_back(std::string(filename));
     path = (char*)malloc(200 * sizeof(char));
     this->path = realpath(filename, path);
     this->targetName = target;
+    this->targets.push_back(std::string(target));
+    this->legacyScope = -1;
+    this->entryFile = filename;
+  }
+
+  parseUnit(char* filename) {
+    this->id = 0; 
+    this->scope = 0; 
+    this->diags = 0;
+    this->curLevel = 0;
+    this->filename = filename;
+    path = (char*)malloc(200 * sizeof(char));
+    this->path = realpath(filename, path);
+    this->targetName = "";
+    //this->targets.push_back(std::string(target));
     this->legacyScope = -1;
   }
 
+  void prepare(char* filename) {
+    this->id = 0; 
+    this->scope = 0; 
+    this->diags = 0;
+    this->curLevel = 0;
+    this->filename = filename;
+    if (std::find(fileNames.begin(), fileNames.end(), std::string(filename)) == fileNames.end() )
+      this->fileNames.push_back(std::string(filename));
+    path = (char*)malloc(200 * sizeof(char));
+    this->path = realpath(filename, path);
+    //this->targetName = ;
+    this->legacyScope = -1;
+
+    this->graph.clear();
+    this->legacyGraph.clear();
+    this->currentScopeChildren.clear();
+    this->scopedGraph.clear();
+
+    this->isReadProj = true;
+  }
+
   // visualization to graphviz ext
-  
-  std::string to_dot();
+  std::string to_sub_dot();
+
+  std::string to_dot(std::vector<visitorData> _graph, std::string name, bool withSub, std::string modName);
+
+  std::string toJson(std::vector<visitorData> _graph, std::string name, bool withSub, std::string modName);
+
+  void checkScopedGraph();
+
+  std::vector<scopedBlock> cutUnusedByTarget();
+
+  std::string getInclusionPath(CXCursor cursor);
 
   std::string getCursorKindName( CXCursorKind cursorKind );
  
@@ -78,7 +140,11 @@ public:
   
   static CXChildVisitResult visitorHelper(CXCursor cursor, CXCursor parent, CXClientData client_data);
 
+  std::vector<visitorData> parseIncludes();
+
   std::vector<visitorData> parse();
+
+  std::vector<std::string> getProjectFiles(std::string projPath);
 };
 
 #endif
