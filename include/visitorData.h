@@ -5,6 +5,7 @@
 #include <vector>
 class visitorData {
 public:
+
   int         parent_id;  // Id of a parent Node
   int         id;
   int         treeLevel;
@@ -15,12 +16,16 @@ public:
   int         controlParent;
   int         scope;      // Scope at which this token is available
   bool        isError;
-  std::string errorSpelling;
+  std::string errorSpelling; 
+  bool        operator==(const visitorData& rhs) const;
+
 };
 
 int find_data_parent(std::vector<visitorData> graph, visitorData* vd);
 
 int find_parent(std::vector<visitorData> graph, int level);
+
+int findTargetParent(std::vector<std::vector<visitorData>> projGraphs, visitorData *vd);
 
 int findControlParent(std::vector<visitorData> graph, visitorData *vd);
 

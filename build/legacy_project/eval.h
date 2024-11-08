@@ -5,6 +5,15 @@
 #include "adder.h"
 #include <algorithm>
 
+class Dummy {
+public:
+  int x;
+
+  Dummy(int _x) {
+    x = _x;
+  }
+};
+
 int eval(void* arg);
 
 bool isEven(void* arg);

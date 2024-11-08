@@ -1,8 +1,79 @@
 #include "../include/unit.h"
 #include <fstream>
 #include <string>
+#include <sys/types.h>
+#include <dirent.h>
+#include <errno.h>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <algorithm>
+
+std::string parseUnit::toJson(std::vector<visitorData> _graph, std::string name, bool withSub, std::string modName) {
+  // int _id = 1;
+  // std::string json = "{\n\"vertices\": [\n{\n";
+  // std::vector<std::pair<int, int>> pairs;
+  // std::vector<std::pair<int, int>> dpairs;
+  // std::vector<int> declars;
+  
+  // int from, to;
+  // // state all nodes
+  // for(visitorData el: _graph) {
+  //   // node name
+  //   bool found_duplicate = false;
+  //   for(int eid: declars) {
+  //     if(el.id == eid) found_duplicate = true;
+  //   }
+  //   declars.push_back(el.id);
+  //   if(!found_duplicate) {
+  //     std::string decl_id = "\"id\": " + "\"" + std::to_string(id);
+  //     std::string label = " [label=\"";
+  //     if(el.spellName.size()) {
+  //       label.append("{");
+  //       label.append(el.kindName); 
+  //       label.append(" | ");
+  //       label.append(el.spellName);
+  //       if(el.typeName.size()) {
+  //         label.append(" | ");
+  //         label.append(el.typeName);
+  //       }
+  //       if(el.errorSpelling.size()) {
+  //         label.append(" | ");
+  //         label.append(el.errorSpelling);
+  //       }
+  //       label.append("}");
+  //       if(std::find(targets.begin(), targets.end(), el.spellName) != targets.end()) {
+  //       //if (el.spellName == this->targetName) {
+  //         label.append(" \"color=\"red\" style=\"filled\" fillcolor=\"white");
+  //       } 
+  //     }
+  //     else {
+  //       label.append(el.kindName);
+  //       label.append("\"][shape=\"oval");
+  //     } 
+  //     if(el.isError) {
+  //       label.append("\"][color=\"red");
+  //     }
+  //     label.append("\"];\n");
+  //     dot.append(label);
+  //   }
+  // }
+
+  // dot.append("\n}");
+  // return dot;
+}
+
+std::string utilGetLastWord(std::string str) {
+  while( !str.empty() && std::isspace( str.back() ) ) str.pop_back() ; // remove trailing white space
+  
+  const auto pos = str.find_last_of( " \t\n" ) ; // locate the last white space
+  
+  // if not found, return the entire string else return the tail after the space
+  return pos == std::string::npos ? str : str.substr(pos+1) ;
+}
 
 std::string parseUnit::to_sub_dot() {
+  //printf(" -- SUB MODULE GRAPH %s\n", this->filename);
   std::vector<scopedBlock> cut = cutUnusedByTarget();
   this->scopedGraph = cut;
   //printf("scopedGraph length: %d\n", scopedGraph.size());
@@ -10,7 +81,7 @@ std::string parseUnit::to_sub_dot() {
   for(int i = 0; i < cut.size(); i++) {
     std::string graphName = "cluster_" + std::to_string(i);
     //printf("%s\n\n", to_dot(el.graph, el.graph[0].spellName, true).c_str());
-    graphTitle.append(to_dot(cut[i].graph, graphName, true));
+    graphTitle.append(to_dot(cut[i].graph, graphName, true, ""));
     graphTitle.append("\n");
   }
   graphTitle.append("}");
@@ -18,9 +89,24 @@ std::string parseUnit::to_sub_dot() {
   return graphTitle;
 }
 
-std::string parseUnit::to_dot(std::vector<visitorData> _graph, std::string name, bool withSub) {
+std::string parseUnit::to_dot(std::vector<visitorData> _graph, std::string name, bool withSub, std::string modName) {
   std::string graphClass = withSub ? "subgraph" : "digraph";
-  std::string dot  = graphClass + " " + name  +  " {\nnode [shape=record];\n";
+  name = name.substr(name.find_last_of("/\\") + 1);
+
+  std::string result;
+  for (int loop = 0; loop < name.length(); ++loop) {
+   switch (name[loop]) {
+    case ',':
+    case '!':
+    case '.':
+        break;
+    default:
+       result += static_cast<unsigned char>(tolower(name[loop]));
+   }
+  }
+  name = result;
+  //printf("--FORMATING %s\n", this->filename);
+  std::string dot  = graphClass + " " + name  +  " {\ncomment=\"" + modName + "\"\nnode [shape=record];\n";
   std::vector<std::pair<int, int>> pairs;
   std::vector<std::pair<int, int>> dpairs;
   std::vector<int> declars;
@@ -50,7 +136,8 @@ std::string parseUnit::to_dot(std::vector<visitorData> _graph, std::string name,
           label.append(el.errorSpelling);
         }
         label.append("}");
-        if (el.spellName == this->targetName) {
+        if(std::find(targets.begin(), targets.end(), el.spellName) != targets.end()) {
+        //if (el.spellName == this->targetName) {
           label.append(" \"color=\"red\" style=\"filled\" fillcolor=\"white");
         } 
       }
@@ -121,7 +208,7 @@ std::string parseUnit::to_dot(std::vector<visitorData> _graph, std::string name,
       }
     }
   }
-*/
+  */
   dot.append("\n}");
   return dot;
 }
@@ -309,6 +396,16 @@ std::string parseUnit::getCurrentFilePath(CXSourceLocation location) {
   return filename;
 }
 
+std::string parseUnit::getInclusionPath(CXCursor cursor) {
+  CXFile includeFile = clang_getIncludedFile(cursor);
+  CXString filePath = clang_getFileName(includeFile);
+  std::string realPath = clang_getCString(filePath);
+
+  clang_disposeString(filePath);
+
+  return realPath;
+}
+
 // get the names of the functions that our TARGET function calls/uses
 std::vector<scopedBlock> parseUnit::cutUnusedByTarget() {
   std::vector<scopedBlock> scopes;
@@ -320,9 +417,12 @@ std::vector<scopedBlock> parseUnit::cutUnusedByTarget() {
 
   bool isTarget = false;
   for(auto el: graph) {
-    if(el.kindName == "FunctionDecl") {
+    if(el.kindName == "FunctionDecl" || el.kindName == "ClassDecl" || el.kindName == "StructDecl") {
       //printf(" !-- WATCHING FUNC %s\n --! ", el.spellName.c_str());
-      if(el.spellName == targetName) {
+      if(
+        std::find(targets.begin(), targets.end(), el.spellName) != targets.end()
+      ) {
+      //if(el.spellName == targetName) {
         isTarget = true;
         //printf("found target %s\n", el.spellName.c_str());
       }
@@ -334,7 +434,7 @@ std::vector<scopedBlock> parseUnit::cutUnusedByTarget() {
     if(el.kindName == "CallExpr") {
       //printf("call to %s| %d\n", el.spellName.c_str(), isTarget);
     }
-    if(el.kindName == "CallExpr" && isTarget) {
+    if((el.kindName == "CallExpr" || el.kindName == "TypeRef") && isTarget) {
       //printf("depend : %s\n", el.spellName.c_str());
       deps.push_back(el.spellName); 
     }
@@ -342,8 +442,20 @@ std::vector<scopedBlock> parseUnit::cutUnusedByTarget() {
       currGraph.push_back(el);
     }
   }
+  
+  for(auto dp: deps) {
+    //printf("--STRIP DEPS %s %s\n", dp.c_str(), utilGetLastWord(dp).c_str());
+    dp = utilGetLastWord(dp);
+    if(std::find(targets.begin(), targets.end(), dp) == targets.end()) {
+      targets.push_back(dp);
+    }
+  }
+  //targets = deps;
+  for(auto tg: targets) {
+    //printf(" --target : %s\n", tg.c_str());
+  }
 
-  sb.name = targetName;
+  sb.name = targets[0];
   sb.graph = currGraph;
   scopes.push_back(sb);
 
@@ -353,7 +465,7 @@ std::vector<scopedBlock> parseUnit::cutUnusedByTarget() {
 
   bool found = false;
   for(auto el: graph) {
-    if(el.kindName == "FunctionDecl") {
+    if(el.kindName == "FunctionDecl" || el.kindName == "ClassDecl") {
       //printf("new scope %s | found %d\n", el.spellName.c_str(), found);
       if(currGraph.size() && found) 
       {
@@ -367,7 +479,8 @@ std::vector<scopedBlock> parseUnit::cutUnusedByTarget() {
       if(!found) {
         currGraph.clear();
       }
-      if(el.spellName == targetName) {
+      if(std::find(targets.begin(), targets.end(), el.spellName) != targets.end()) {
+      //if(el.spellName == targetName) {
         found = true;
       }
       for(auto name: deps) {
@@ -441,7 +554,7 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   std::string errorSpell = getErrorSpelling(loc, errors);
    
   bool foundFunc = false;
-  bool isTargetFunc = spellName == this->targetName ? true : false;
+  bool isTargetFunc =  (  std::find(targets.begin(), targets.end(), spellName) != targets.end()) ? true : false;
 
   unsigned int curLevel = this->curLevel;
   unsigned int nextLevel = curLevel + 1;
@@ -459,6 +572,14 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
   vd -> scope = scope;
   
   switch(cursorKind) {
+    case CXCursor_ClassDecl: {
+    // if(std::find(savedTargets.begin(), savedTargets.end(), spellName) != savedTargets.end()) 
+    //   return CXChildVisit_Continue;
+    } break;
+    case CXCursor_InclusionDirective: {
+      this->headers.push_back(getInclusionPath(cursor));
+      //printf("include %s\n", );
+    } break;
     case CXCursor_ParenExpr:  {
       return CXChildVisit_Continue;
     } break;
@@ -476,8 +597,8 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       md.loc = loc;
       md.id = id;
       md.isFunction = clang_Cursor_isMacroFunctionLike(cursor);
-      int dparent_id = find_data_parent(legacyGraph, vd);
-      vd->dataParent = dparent_id;
+      //int dparent_id = find_data_parent(legacyGraph, vd);
+      //vd->dataParent = dparent_id;
       this->macrosLoc.push_back(md);
     } break;
     case CXCursor_MacroDefinition: {
@@ -519,9 +640,13 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       if(op.size()) vd->spellName = op;
     } break;
     case CXCursor_FunctionDecl: {
+      if(std::find(savedTargets.begin(), savedTargets.end(), spellName) != savedTargets.end()) 
+        return CXChildVisit_Continue;
+
       std::string typeName = getTypeSpell(cursorType); 
       vd->typeName = typeName;
-      if(spellName == targetName) {
+      if(std::find(targets.begin(), targets.end(), spellName) != targets.end()) {
+      //if(spellName == targetName) {
         foundFunc = true;
       }
       scope++;
@@ -557,13 +682,16 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
       vd->typeName = realType;
     } break;
     case CXCursor_TypeRef: {
-      int dparent_id = find_data_parent(legacyGraph, vd);
-      //printf("  TYPEREF: : %s %d\n", realType.c_str(), dparent_id);
-      vd->dataParent = dparent_id;
+      // int dparent_id = findTargetParent(projGraphs, vd);
+      // //printf("  TYPEREF: : %s %d\n", realType.c_str(), dparent_id);
+      // vd->dataParent = dparent_id;
     } break;
     case CXCursor_CallExpr: {
+      // int dparent_id = findTargetParent(projGraphs, vd);
+      // vd->dataParent = dparent_id;
       //printf("!-- COMPARE %s to %s\n", spellName.c_str(), targetName);
-      if(spellName == targetName) {
+      if(std::find(targets.begin(), targets.end(), spellName) != targets.end()) {
+      //if(spellName == targetName) {
         foundFunc = true;
       }  
     } break;
@@ -636,6 +764,10 @@ CXChildVisitResult parseUnit::visitor( CXCursor cursor, CXCursor /* parent */)
     graph.push_back(*vd);
   }
 
+  if(isTargetFunc && std::find(savedTargets.begin(), savedTargets.end(), spellName) == savedTargets.end()) 
+    savedTargets.push_back(spellName);
+    targetNodes.push_back(std::pair<int, std::string>(vd->id, vd->spellName));
+
   clang_visitChildren( cursor,
                        parseUnit::visitorHelper,
                        this ); 
@@ -669,27 +801,193 @@ std::vector<errorLoc> parseUnit::diagnoseForErrors() {
   return errors;
 }
 
+std::vector<std::string> parseUnit::getProjectFiles(std::string projPath) {
+  std::vector<std::string> paths;
+  DIR *dp;
+  struct dirent *dirp;
+  if((dp  = opendir(projPath.c_str())) == NULL) {
+    perror("error open dir");
+  }
+
+  while ((dirp = readdir(dp)) != NULL) {
+    //printf(" -- PATH FILE IN PROJ: %s\n", dirp->d_name); 
+    std::string dname(dirp->d_name);
+    std::string ogFile(this->entryFile);
+    if(dname != ogFile) {
+      std::string exten = dname.substr(dname.find_last_of(".") + 1);
+      //printf(" -- SUBMODULE EXTEN %s | %d\n", exten.c_str(), (dname != "." && dname != ".." && (exten == "h" || exten == "cc" || exten == "cpp" || exten == "hpp")));
+      if(dname != "." && dname != ".." && (exten == "h" || exten == "cc" || exten == "cpp" || exten == "hpp")) {
+        paths.push_back(projPath + "/" + "/" + std::string(dirp->d_name));
+      }
+    }
+  }
+  closedir(dp);
+
+  return paths;
+}
+
+std::vector<visitorData> parseUnit::parseIncludes() {
+  std::string path = this->path;
+  //printf(" -- PATH SINGLE FILE: %s\n", path.c_str());
+  std::string projPath = path.substr(0, path.find_last_of("/\\"));
+  //printf(" -- PATH ALL: %s\n", projPath.c_str());
+  std::vector<std::string> paths = getProjectFiles(projPath);
+  std::string incName;
+
+  std::vector<std::string> graphs;
+
+  // for each target func 
+  for(int i = 0; i < paths.size(); i++) {
+    // for each module 
+    for(int j = 0; j < targets.size(); j++) {
+      incName = paths[i];
+
+      
+      this->prepare((char*)incName.c_str());
+      //printf(" -HEADER %s %s\n", incName.c_str(), this->filename);
+      this->targetName = (char*)targets[j].c_str();
+      CXIndex index        = clang_createIndex( 0, 1 );
+      visitorData* vData = (visitorData*)malloc(sizeof(visitorData));
+      //CXTranslationUnit tu = clang_createTranslationUnit( index, "hello.cpp" );
+     
+      char* arg1 = "-x";
+      char* arg2 = "c++";
+      char* arg3 = "-std=c++17";
+      char* arg4 = "-E";
+      char* arg5 = "-I/usr/lib/gcc/x86_64-linux-gnu/12/include";
+      const char** cl_args = (const char**)malloc(5 * sizeof(char*));
+      cl_args[0] = arg1;
+      cl_args[1] = arg2;
+      cl_args[2] = arg3;
+      cl_args[3] = arg4;
+      cl_args[4] = arg5;
+
+      tu = clang_parseTranslationUnit(
+        index,
+        incName.c_str(), cl_args, 5,
+        nullptr, 0,
+        CXTranslationUnit_None | CXTranslationUnit_DetailedPreprocessingRecord); //Parse "file.cpp" 
+
+      if( !tu ) {
+        return std::vector<visitorData>();
+      }
+
+      errors = diagnoseForErrors();
+
+      CXCursor rootCursor  = clang_getTranslationUnitCursor( tu );
+
+      unsigned int treeLevel = 0;
+      vData->treeLevel = 0;
+      vData->id = 0;
+
+      clang_visitChildren( rootCursor, parseUnit::visitorHelper, this );
+
+      clang_disposeTranslationUnit( tu );
+      clang_disposeIndex( index );
+
+      std::string filename = "asg_graph.dot";
+
+      //checkScopedGraph();
+      std::string graphTitle = "digraph G {\ncompound=true;\n";
+
+      std::vector<scopedBlock> cut = cutUnusedByTarget();
+      for(auto sb: cut) {
+        std::string fName(this->filename);
+        std::string exten = fName.substr(fName.find_last_of(".") + 1);
+        if( std::find(projGraphs.begin(), projGraphs.end(), sb.graph) == projGraphs.end() 
+            && 
+            !sb.graph.empty() 
+          ) 
+        {
+          //printf("  --PUSHED TO GLOBAL GRAPHS %s\n", sb.name.c_str());
+          projGraphs.push_back(sb.graph);
+        }
+      }
+
+      /*
+      if(!targets.empty()) {
+      //if(targetName != "") {
+        std::string dotgraph = to_sub_dot(); 
+        bool pushed = false;
+        if(std::find(graphs.begin(), graphs.end(), dotgraph) == graphs.end()) {
+          graphs.push_back(dotgraph);
+          pushed = true;
+        }
+        printf("==== got %d ====\n", pushed);
+        for(int i = 0; i < 6; i++) {
+          printf("  -- %s %s\n", graph[i].kindName.c_str(), graph[i].spellName.c_str());
+        }
+        printf("==================\n");
+        //printf("%s\n", dotgraph.c_str());
+      }
+      */
+      /*
+      else {
+        printf("%s\n", to_dot(graph, this->filename, false).c_str()); 
+      } 
+      */
+      // parse headers 
+
+
+      /*
+      std::ofstream outFile(filename);
+      if (outFile.is_open()) {
+        outFile << to_dot().c_str();
+        outFile.close();
+      } else {
+        std::cerr << "Unable to open file " << filename << "\n";
+      }
+    */
+
+      }
+  }
+      
+  int f = 0;
+  printf("digraph G { \nnode [shape=record];\n");
+  for(auto pg: projGraphs) {
+    std::string graphName = "cluster_" + std::to_string(f);
+    printf("%s\n", to_dot(pg, graphName, true, this->fileNames[f]).c_str());
+    //printf("\n=========%s=========\n%s\n", this->fileNames[f].c_str(), to_dot(pg, graphName, true, this->fileNames[f]).c_str());
+    //printf("\n==================\n");
+    f++;
+  }
+  printf("}\n");
+  // for(auto el: projGraphs) {
+  //   printf("%s\n===========================\n", el.c_str());
+  // } 
+  //printf("SAVED TARGETS: \n");
+  // for(auto tg: savedTargets) {
+  //   printf("%s\n", tg.c_str());
+  // }
+  return graph;
+}
+
 std::vector<visitorData> parseUnit::parse()
 {
+  //printf("name %s\n", this->filename);
   CXIndex index        = clang_createIndex( 0, 1 );
   visitorData* vData = (visitorData*)malloc(sizeof(visitorData));
   //CXTranslationUnit tu = clang_createTranslationUnit( index, "hello.cpp" );
- 
+  
   char* arg1 = "-x";
   char* arg2 = "c++";
   char* arg3 = "-std=c++17";
   char* arg4 = "-E";
   char* arg5 = "-I/usr/lib/gcc/x86_64-linux-gnu/12/include";
-  const char** cl_args = (const char**)malloc(5 * sizeof(char*));
+  char* arg6 = "-Wno-unused-variable";
+  const char** cl_args = (const char**)malloc(6 * sizeof(char*));
   cl_args[0] = arg1;
   cl_args[1] = arg2;
   cl_args[2] = arg3;
   cl_args[3] = arg4;
   cl_args[4] = arg5;
+  cl_args[5] = arg6;
+
+  //printf("name %s\n", this->filename);
 
   tu = clang_parseTranslationUnit(
     index,
-    filename, cl_args, 5,
+    filename, cl_args, 6,
     nullptr, 0,
     CXTranslationUnit_None | CXTranslationUnit_DetailedPreprocessingRecord); //Parse "file.cpp" 
 
@@ -697,6 +995,7 @@ std::vector<visitorData> parseUnit::parse()
     return std::vector<visitorData>();
   }
 
+  //printf("TU is okay");
   errors = diagnoseForErrors();
 
   CXCursor rootCursor  = clang_getTranslationUnitCursor( tu );
@@ -710,17 +1009,29 @@ std::vector<visitorData> parseUnit::parse()
   clang_disposeTranslationUnit( tu );
   clang_disposeIndex( index );
 
-  std::string filename = "asg_graph.dot";
+  //std::string filename = "asg_graph.dot";
 
   //checkScopedGraph();
+  
+  
+  // if(!targets.empty()) {
+  // //if(targetName != "") {
+  //   std::string dotgraph = to_sub_dot(); 
+  //   printf("%s\n", dotgraph.c_str());
+  // }
+  // else {
+  //   printf("%s\n", to_dot(graph, this->filename, false, this->fileNames[0]).c_str()); 
+  // } 
 
-  if(targetName != "") {
-    std::string dotgraph = to_sub_dot(); 
-    printf("%s\n", dotgraph.c_str());
+  std::string dotgraph = to_sub_dot(); 
+  //printf("%s\n", dotgraph.c_str());
+
+  //std::vector<scopedBlock> cut = cutUnusedByTarget();
+  for(auto sb: scopedGraph) {
+    this->projGraphs.push_back(sb.graph);
   }
-  else {
-    printf("%s\n", to_dot(graph, this->filename, false).c_str()); 
-  } 
+  // parse headers 
+
 
   /*
   std::ofstream outFile(filename);

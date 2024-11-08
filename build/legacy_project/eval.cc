@@ -20,6 +20,7 @@ bool isEven(void* arg) {
 // ОНА ЗАВИСИТ ОТ eval()
 // НАМ НУЖНО ПОЛУЧИТЬ ЕЁ И ВЫЗЫВАЕМЫЕ ЕЙ НАШИ ФУНКЦИИ (to est eval)
 std::vector<Adder> filter(std::vector<Adder> adders) {
+  Dummy dumm(2);
   for(int i = 0; i < adders.size(); i++) {
     for(int j = 0; j < adders.size(); j++) {
       if(eval(&adders[j]) < eval(&adders[i])) {
